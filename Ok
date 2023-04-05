@@ -653,7 +653,7 @@ window.CheatAPI = top.CheatAPI = {
 		SpawnPointYellow: 258625,
 		SpawnPointRed: 258627,
 		SpawnPointBlue: 258628,
-        PickupItemSpawner: 8880186,
+        PickupItemSpawner: 91197,
         PickupItemSpawner2: 258630,
         PickupItemSpawer3: 258631,
         PickupItemSpawner4: 258633,
