@@ -1,0 +1,1243 @@
+// ==UserScript==
+// @name				Test XP
+// @run-at			document-start
+// @version			3.3.3
+// @description	kogama cheat console alpha
+// @author		Simøn
+// @match				https://www.kogama.com/page/webgl-frame/*
+// @match				https://kogama.com.br/page/webgl-frame/*
+// @match				https://friends.kogama.com/page/webgl-frame/*
+// @grant				none
+// ==/UserScript==
+
+/*Sniffers*/
+WS_Original=WebSocket;
+WebSocket=function(url,type){
+	let ws=new WS_Original(url,type);
+	kcc.ws=ws;
+
+	ws._send=ws.send;
+	ws.send=kcc.inject.client;
+	kcc.log.client('injected client');
+	function waitServer(e){
+		kcc.inject.server(e);
+		if(!this.editServer){
+			this.removeEventListener('message',waitServer);
+			this._msg=this.onmessage;
+			this.onmessage=kcc.inject.server;
+		}
+		kcc.log.server('injected server');
+	}
+	ws.addEventListener('message',waitServer);
+
+	return ws;
+};
+
+/*Kogama Console Interface*/
+{
+	window.html=top.html=id=>top.document.getElementById(id);
+	window.make=top.make=tag=>top.document.createElement(tag);
+	window.kc=top.kc={green:'#43B581',red:'#F04747',blue:'#72A9DA',
+		log:(msg,clr='#FFF')=>{
+			if(html('console_log').lastChild&&msg == html('console_log').lastChild.textContent){
+				let counter=html('console_log').lastChild.children[0];
+				if(counter){
+					counter.value=1+Number(counter.value);
+				}else{
+					counter=make('input');
+					counter.style=`height:20px;width:20px;
+					text-align:center;padding:0px;
+					background:${kc.green};color:#0e0e0e;
+					border:none;border-radius:100%;cursor:default;`;
+					counter.value=2;
+					counter.disabled=true;
+					html('console_log').lastChild.appendChild(counter)
+				}
+				return;
+			}
+			let scroll=html('console_log').scrollTop/(html('console_log').scrollHeight-html('console_log').offsetHeight);
+			if(isNaN(scroll)||scroll>0.9){scroll=true;}
+			else{scroll=false;}
+			let el=make('div');
+			el.style='padding:2% 1% 0px 2%;width:100%;color:'+clr+';';
+			el.textContent=msg;
+			html('console_log').appendChild(el);
+			if(scroll)html('console_log').scrollTop=html('console_log').scrollHeight-html('console_log').offsetHeight;
+		},
+		command:str=>{
+			kc.log(str,'#FFF8');
+		}
+	};
+	window.makeCheat=top.makeCheat=(name='unknown',clr='#888',func=()=>{})=>{
+		let el=make('input');
+		el.id=name;
+		el.value=name;
+		el.className='cheat_element';
+		el.type='button';
+		el.style=`color:${clr};background-color:#4f545c;border-radius:10px;border:none;padding:2px;`;
+		el.addEventListener('click',func);
+		html('cheat_box').appendChild(el);
+	};
+	window.addBB=top.addBB=(name='unknown',id='unknown',box='unknown_box',choosen=0)=>{
+		let el=make('div');
+		el.id=box;
+		el.style=`
+			position:absolute;
+			display:${choosen?'block':'none'};
+			width:75%;height:90%;
+			top:10%;
+			right:0px;
+		`;
+		html('console').appendChild(el);
+		el=make('div');
+		el.id='console_bar_'+id;
+		el.className='bar_element bar_element_'+(choosen?'on':'off');
+		el.textContent=name;
+		el.addEventListener('click',function(e){
+			if(this != html('console_bar').cur){
+				html(box).style.display='block';
+				html('console').cur.style.display='none';
+				html('console').cur=html(box);
+				this.className='bar_element bar_element_on';
+				html('console_bar').cur.className='bar_element bar_element_off';
+				html('console_bar').cur=this;
+			}
+		});
+		html('console_bar').appendChild(el);
+	};
+	var sheet=top.document.head.appendChild(make('style')).sheet;
+	sheet.insertRules=rules=>rules.replace(/\}/g,'}^').split('^').map(r=>(r.indexOf('{')+1)&&sheet.insertRule(r));
+	sheet.insertRules(`
+		.scroller{overflow-y:auto;}
+		.scroller::-webkit-scrollbar{
+			width:10px;
+		}
+		.scroller::-webkit-scrollbar-thumb{
+			background-color:rgba(0,0,0,.4);
+			-webkit-box-shadow:inset 0 0 2px rgba(0,0,0,.5);
+			box-shadow:inset 0 0 2px rgba(0,0,0,.5);
+		}
+		.scroller::-webkit-scrollbar-track{
+			background-color:rgba(0,0,0,.3);
+		}
+		.scroller::-webkit-scrollbar-thumb{
+			background:#000;
+		}
+		.bar_element:hover{
+			opacity:0.9;
+			background:#0e0e0e;
+			transition-duration: 0.3s;
+		}
+		.bar_element{
+			color:#FFF;
+			line-height: 200%;
+			cursor:pointer;
+			height:10%;
+			width:100%;
+		}
+		.cheat_element:hover{
+			color:#FFF !important;
+		}
+		.bar_element_off{
+			opacity:0.5;
+			background:#0e0e0e;
+		}
+		.bar_element_on{
+			opacity:1;
+			background:#0e0e0e;
+		}
+	`);
+	let el=make('div');
+	top.document.body.appendChild(el);
+	el.id='console';
+	el.style=`
+		position:fixed;
+		display:none;
+		z-index:9999;
+		background-color:#0e0e0e;
+		text-align:center;
+		border-radius:10px;
+		border:3px #0e0e0e solid;
+	`;
+	top.addEventListener('resize',function(){
+		html('console').style.width=top.outerWidth*0.35+'px';
+		html('console').style.height=top.outerHeight*0.35+'px';
+	});
+	top.dispatchEvent(new Event('resize'));
+	top.document.addEventListener('mouseup',e=>{
+		if(html('console').movement){
+			html('console').movement=false;
+			e.preventDefault();
+			e.stopPropagation();
+		}
+	})
+	top.document.addEventListener('mousemove',e=>{
+		if(html('console').movement){
+			html('console').style.left=(html('console').startPos.x+e.x-html('console').startPos.mx)+'px';
+			html('console').style.top=(html('console').startPos.y+e.y-html('console').startPos.my)+'px';
+			if(html('console').offsetTop<0)html('console').style.top='0px';
+			e.preventDefault();
+			e.stopPropagation();
+		}
+	});
+	top.document.addEventListener('contextmenu',e=>{
+		if(e.target == top.document.querySelector('#profile-extended-toggle>a>i')){
+			html('console').style.display='block';
+			e.preventDefault();
+		}
+	});
+	el=make('div');
+	el.id='console_head';
+	el.innerHTML='Crystal Console';
+	el.style=`
+		width:100%;height:10%;
+		background-color:#0e0e0e;
+		cursor:default;
+		border-top-left-radius:10px;
+		border-top-right-radius:10px;
+	`;
+	html('console').appendChild(el);
+	html('console_head').addEventListener('mousedown',e=>{
+		html('console').movement=true;
+		html('console').startPos={x:html('console').offsetLeft,y:html('console').offsetTop,mx:e.x,my:e.y};
+		e.preventDefault();
+		e.stopPropagation();
+	});
+	el=make('input');
+	el.id='console_close';
+	el.type='button';
+	el.value='X';
+	el.style=`
+		position:absolute;
+		height:10%;width:10%;
+		right:0px;
+		background-color:${kc.red};
+		color:#FFF;line-height:0.5;
+		border:none;
+		border-top-right-radius:10px;
+	`;
+	html('console_head').appendChild(el);
+	html('console_close').addEventListener('mousedown',e=>{
+		if(e.which == 1){
+			pos={x:html('console').offsetLeft,y:html('console').offsetTop};
+			html('console').style.display='none';
+			html('console').style.left=pos.x+'px';
+			html('console').style.top=pos.y+'px';
+		}
+		e.preventDefault();
+		e.stopPropagation();
+	});
+	el=make('div');
+	el.id='console_bar';
+	el.style=`
+		position:absolute;
+		top:10%;left:0px;
+		width:25%;height:90%;
+		background-color:#0e0e0e;
+	`;
+	html('console').appendChild(el);
+
+	addBB('Console','console','console_box',1);
+	html('console').appendChild(el);
+	el=make('input');
+	el.id='console_input';
+	el.placeholder='Enter command...';
+	el.style=`
+		position:absolute;
+		width:95%;height:10%;
+		bottom:2.5%;right:2.5%;
+		background-color:#0e0e0e;
+		border:none;color:#0e0e0e;
+		border-radius:15px;
+		text-align:center;
+		cursor:text;
+	`;
+	html('console_box').appendChild(el);
+	html('console_input').index=-1;
+	html('console_input').old=[];
+	html('console_input').addEventListener('keydown',function(e){
+		switch(e.keyCode){
+			case 13:
+				if(this.value){
+					kc.command(this.value);
+					if(this.old[this.old.length-1] != this.value)this.old.push(this.value);
+					if(this.old>30)this.old.splice(0,1);
+					this.was=undefined;
+					this.index=this.old.length;
+					this.value='';
+				}
+			break;
+			case 38://up
+				this.index-=2;
+			case 40://down
+				this.index++;
+				if(this.index>this.old.length-1)this.index=this.old.length;
+				if(this.index<0)this.index=0;
+				if(this.index>this.old.length-1){
+					if(this.was !== undefined)this.value=this.was;
+					this.was=undefined;
+				}else{
+					if(this.was === undefined)this.was=this.value;
+					this.value=this.old[this.index];
+				}
+			break;
+		}
+	});
+	el=make('div');
+	el.id='console_log';
+	el.className='scroller';
+	el.style=`
+		position:absolute;
+		text-align:left;
+		width:100%;height:85%;
+		word-break:break-all;
+	`;
+	html('console_box').appendChild(el);
+
+	html('console').cur=html('console_box');
+	html('console_bar').cur=html('console_bar_console');
+
+
+
+	document.addEventListener('keydown',e=>{
+		switch(e.key){
+			case '`':
+			break;
+			case '-':
+			break;
+			case '+':
+			break;
+		}
+	});
+	//makeCheat('big',kc.green,()=>kc.big());
+
+	addBB('About','cheat_about','about_box');
+	html('about_box').className='scroller';
+	el=make('div');
+	el.id='about_box_info';
+	el.style.whiteSpace='pre';
+	el.textContent=`Simøn
+        Crystal
+               Cheat
+`;
+	html('about_box').appendChild(el);
+}
+
+/*emulation*/
+Object.prototype.find=function(func){
+	return Object.entries(this).find(a=>func(a[1]))//find(value)//give [key,value]
+}
+Object.defineProperty(Object.prototype,'find',{enumerable: false});
+function Enum([definition]) {
+	let ci=0;
+	return Object.freeze(
+		definition.trim().replace(/\s*,\s*/g,' ').replace(/\s*=\s*/g,'=').split(/\s+/)
+			.reduce((old,p)=>{
+				ci=p.split('=')[1]?Number(p.split('=')[1]):ci;
+				return{
+					...old,
+					[p.split('=')[0]]:ci++
+				}
+			},{})
+	);
+}
+const MVEventCodes=Enum`
+NoCodeSet,
+UnregisterWorldObject,
+UpdateWorldObject,
+UpdateWorldObjectData,
+UpdateWorldObjectDataPartial,
+RemoveWorldObjectDataPartial,
+TransferOwnership,
+UpdateNetworkInput,
+RegisterPrototype,
+UnregisterPrototype,
+UpdatePrototype,
+UpdatePrototypeScale,
+UpdateTerrain,
+AddLink,
+RemoveLink,
+RemoveItemFromInventory,
+FriendRequest,
+FriendUpdate,
+TriggerBoxEnter,
+TriggerBoxExit,
+TriggerBoxStayBegin,
+TriggerBoxStayEnd,
+Clone,
+LockHierarchy,
+BlueprintCreationDone,
+WoUniquePrototype,
+GameStateChange,
+SyncAvatarStatus,
+ResetLogicChunk,
+UpdateWorldObjectRunTimeData,
+PickupItemStateChange,
+UpdateLineOfFire,
+WorldObjectRPCEvent,
+XPReceivedEvent,
+PostGameMsgEvent,
+SetTeam,
+AddObjectLink,
+RemoveObjectLink,
+TransferWorldObjectsToGroup,
+CloneWorldObjectTree,
+GetGameBatch,
+GameQueryReady,
+PostWinnerReport,
+CollectiblePickedUp,
+SetWorldObjectsToPurchasedEvent,
+AchievementUnlockedEvent,
+AttachWorldObjectToSeat,
+DetachWorldObjectFromVehicle,
+SpawnVehicleWithDriver,
+Reward,
+RuntimeEvent,
+ResetTerrainEvent,
+UpdateGameStat,
+UpdateGameStatType,
+UpdateAvatarMetaData,
+LevelChanged,
+GameBoostEvent,
+NotificationEvent,
+RequestMaterials,
+GetPlanetOwnershipTypes,
+GetItemCategories,
+SetupUserPlayMode,
+GameSnapshotData,
+SetActorReady,
+RequestFriends,
+GetItemInventory,
+GetItemShopInventory,
+GetBuiltInItemBusinessData,
+LargeDBQueryAvatarShopInventory,
+InitializeAvatarEdit,
+GetActiveAvatar,
+PendingByteDataBatch,
+SwitchAvatar,
+SyncronizePing,
+StartRewardCountDown,
+RewardIsReady,
+NumberOfPendingRewards,
+JoinNotification,
+CloneWorldObjectTreeWithPosition,
+CloneTempWorldObjectWithOriginalReferenceEvent,
+LogicObjectFiringStateChange,
+LogicFrame,
+CollectTheItemDropOff,
+LogicFastForward,
+LogicFastForwardEventImmediate,
+ForceDetachWorldObjectFromVehicle,
+XPReward,
+GetProfileMetaData,
+ServerError,
+SetSayChatBubbleVisible,
+GetPublishedPlanetProfileData,
+PlayerPlanetData,
+PlayerPlanetRemote,
+HighScores,
+GoldRewardedForLevel,
+NextLevelGoldReward,
+PlayerTierStateCalculatorChanged,
+GetProjectEarnings,
+TopHighScores,
+GetKogamaVat,
+GetSubscriptionPerksData,
+SetupUserAvatarEdit,
+SetupUserBuildMode,
+SetActiveSpawnRole,
+ReplicateSpawnRoleData,
+SetSpawnRoleBody,
+XPRewardedAdReady,
+Join = 255,
+Leave = 254,
+PropertiesChanged = 253
+`;
+const MVOperationCodes=Enum`
+RegisterWorldObject,
+UnregisterWorldObject,
+UpdateWorldObject,
+UpdateWorldObjectData,
+UpdateWorldObjectDataPartial,
+RemoveWorldObjectDataPartial,
+TransferOwnership,
+UpdatePrototype,
+UpdatePrototypeScale,
+AddLink,
+RemoveLink,
+PublishPlanet,
+AddPrototypeToInventory,
+RemoveItemFromInventory,
+UpdateInventorySlots,
+RequestFriendshipByProfileID,
+RequestAcceptFriendship,
+RequestRejectFriendship,
+TriggerBoxEnter,
+TriggerBoxExit,
+LockHierarchy,
+UploadScreenshot,
+RequestWoUniquePrototype,
+ReportCaptureFlag,
+ResetLogicChunk,
+UpdateWorldObjectRunTimeData,
+UpdateLineOfFire,
+WorldObjectRPCOperation,
+PostGameMsg,
+SetTeam,
+AddObjectLink,
+RemoveObjectLink,
+TransferWorldObjectsToGroup,
+CloneWorldObjectTree,
+AddPlanetToPlanet,
+PurchaseProduct,
+GetNextGameBatch,
+RequestBuiltInItem,
+AddItemToWorld,
+AddWorldObjectToInventory,
+AddWorldObjectToInventoryDev,
+SetActiveAvatar,
+ResetAvatar,
+GetMarketPlaceItem,
+AddItemToMarketPlace,
+RemoveItemFromMarketPlace,
+SetAvatarAccessorySlot,
+AttachWorldObjectToSeat,
+DetachWorldObjectFromVehicle,
+SpawnVehicleWithDriver,
+ClientLog,
+UpdateAvatarAccessoryOffset,
+RuntimeEvent,
+ResetTerrain,
+AddAvatarToAvatarShopInventory,
+DeleteAvatarFromShopInventory,
+LevelChanged,
+Ban,
+Syncronize,
+SwitchAvatar,
+SyncronizePing,
+JoinNotification,
+UploadBytes,
+Notification,
+CloneWorldObjectTreeWithPosition,
+CloneTempWorldObjectWithOriginalReference,
+LogicActivateRequest,
+AdminOperation,
+OwnerOperation,
+ResetFirstTimeEvents=83,
+SetFirstTimeEvent,
+OverrideFirstTimeEvent,
+GetResetAvatar,
+ClaimPlayingNewGameRewardedGold,
+PostChatMsg,
+SetSayChatBubbleVisible=93,
+ReportReachedTimeAttackFlag,
+RequestAccessoryData,
+UnEquipAccessory,
+SetHighlightToSeen,
+ResetHighlights,
+UpdateAvatarAccessoryScale,
+GetThemesData,
+SetMouseSensitivity,
+StartSessionTime,
+ResetPlayerPlanetData,
+GetHighScoreList,
+SetGamePassTierOperation,
+SetGamePassTierToSeenOperation,
+SetEarningsReportToSeenOperation,
+GetTopHighScoreList,
+ClaimGamePointWelcomeReward,
+UpdateGold,
+SetActiveSpawnRole,
+CustomDevCommands,
+CreateSpawnRole,
+GetAvatarBodies,
+SetSpawnRoleBody,
+TogglePreviewTierOperation,
+ClaimRewardedAdXP,
+IncrementStatRequest,
+Undefined,
+Join=255,
+Leave=254,
+RaiseEvent=253,
+SetProperties=252,
+GetProperties=251,
+Ping=249
+`;
+/*emulation*/
+class StreamBuffer{
+	constructor(array=[]){this.index=0;this.array=new Uint8Array(array);}
+	readByte(){return this.array[this.index++];}
+	read(count){
+		let arr=new Uint8Array(Math.min(count,this.array.length-this.index));
+		for(let i=0;i<arr.length;i++)arr.set([this.readByte()],i);
+		return arr;
+	}
+	writeByte(byte){this.array=new Uint8Array([...this.array,byte]);this.index++;}
+	write(array){for(let i=0;i<array.length;i++)this.writeByte(array[i])}
+}
+
+/*types*/
+function protoReverse(){
+	return this.map(a=>new this.constructor(new Uint8Array(new this.constructor([a]).buffer).reverse().buffer)[0])
+}
+function protoByte(){
+	return new Uint8Array(this.reversed().buffer);
+}
+Uint16Array.prototype.bytes=
+Int16Array.prototype.bytes=
+BigUint64Array.prototype.bytes=
+BigInt64Array.prototype.bytes=
+Float64Array.prototype.bytes=
+Float32Array.prototype.bytes=
+Uint32Array.prototype.bytes=
+Int32Array.prototype.bytes=protoByte;
+Uint16Array.prototype.reversed=
+Int16Array.prototype.reversed=
+BigUint64Array.prototype.reversed=
+BigInt64Array.prototype.reversed=
+Float64Array.prototype.reversed=
+Float32Array.prototype.reversed=
+Uint32Array.prototype.reversed=
+Int32Array.prototype.reversed=protoReverse;
+class TType{
+	constructor(type,typeCode,value){this.type=type;this.typeCode=typeCode;this.value=value;}
+	result(){return this.value}//bytes
+	size(){return this.value.length}//number
+	read(buf,full=0,size=-1){
+		let res=new this.constructor(new Uint8Array(
+			buf.read(size+1?size:this.size())
+		));
+		return full?res:res.value;
+	}
+	write(buf,full=0){
+		if(full)buf.writeByte(this.typeCode);
+		buf.write(this.result());
+	}
+}
+class Byte extends TType{
+	constructor(value=0){if(value.buffer){super('Byte',98,value[0])}else{super('Byte',98,value);}}
+	result(full=0){return new Uint8Array([...(full?[this.typeCode]:[]),this.value]);}
+	size(){return 1;}
+}
+class Bool extends TType{
+	constructor(value=0){if(value.buffer){super('Bool',111,value[0]?1:0)}else{super('Bool',111,value?1:0);}}
+	result(full=0){return new Uint8Array([...(full?[this.typeCode]:[]),this.value?1:0]);}
+	size(){return 1;}
+}
+class Short extends TType{
+	constructor(value=0){if(value.buffer){super('Short',107,new Int16Array(value.reverse().buffer)[0])}else{super('Short',107,value);}}
+	result(full=0){return new Uint8Array([...(full?[this.typeCode]:[]),...new Int16Array([this.value]).bytes()]);}
+	size(){return 2;}
+}
+class Int extends TType{
+	constructor(value=0){if(value.buffer){super('Int',105,new Int32Array(value.reverse().buffer)[0])}else{super('Int',105,value);}}
+	result(full=0){return new Uint8Array([...(full?[this.typeCode]:[]),...new Int32Array([this.value]).bytes()]);}
+	size(){return 4;}
+}
+class Long extends TType{
+	constructor(value=0){if(value.buffer){super('Long',108,new BigInt64Array(value.reverse().buffer)[0])}else{super('Long',108,value);}}
+	result(full=0){return new Uint8Array([...(full?[this.typeCode]:[]),...new BigInt64Array([this.value]).bytes()]);}
+	size(){return 8;}
+}
+class Float extends TType{
+	constructor(value=0){if(value.buffer){super('Float',102,new Float32Array(value.reverse().buffer)[0])}else{super('Float',102,value);}}
+	result(full=0){return new Uint8Array([...(full?[this.typeCode]:[]),...new Float32Array([this.value]).bytes()]);}
+	size(){return 4;}
+}
+class Double extends TType{
+	constructor(value=0){if(value.buffer){super('Double',100,new Double64Array(value.reverse().buffer)[0])}else{super('Double',100,value);}}
+	result(full=0){return new Uint8Array([...(full?[this.typeCode]:[]),...new Float64Array([this.value]).bytes()]);}
+	size(){return 8;}
+}
+class ByteArray extends TType{
+	constructor(value=[]){super('ByteArray',120,new Uint8Array([...value]))}
+	result(full=0){
+		return new Uint8Array([
+			...(full?[this.typeCode]:[]),
+			...new Int(this.size()).result(),
+			...this.value
+		]);
+	}
+	size(){return this.value.length;}
+	read(buf,full=0,size=-1){
+		size=size+1?size:new Int().read(buf);
+		let res=new this.constructor(new Uint8Array(buf.read(size)));
+		return full?res:res.value;
+	}
+}
+class Null extends TType{
+	constructor(value=0){super('Null',42,null);}
+	result(full=0){return new Uint8Array([...(full?[this.typeCode]:[])]);}
+	size(){return 0;}
+}
+class String extends TType{
+	constructor(value=''){if(value.buffer){super('String',115,new TextDecoder().decode(value))}else{super('String',115,value);}}
+	size(){return new TextEncoder().encode(this.value).length}
+	result(full=0){
+		return new Uint8Array([
+			...(full?[this.typeCode]:[]),
+			...new Short(this.size()).result(),
+			...new TextEncoder().encode(this.value)
+		]);
+	}
+	read(buf,full=0,size=-1){
+		size=size+1?size:new Short().read(buf);
+		let res=new this.constructor(new Uint8Array(buf.read(size)));
+		return full?res:res.value;
+	}
+}
+class TArray extends TType{//{key:value,...}
+	constructor(value=[],TValue=121){super('TArray',121,value);this.TValue=TValue;}
+	size(){return this.value.length}
+	result(full=0){
+		let arr=[];
+		for(let k in this.value){
+			if(this.value[k].result){
+				arr=[
+					...arr,
+					...this.value[k].result()
+				];
+			}
+		}
+		return new Uint8Array([
+			...(full?[this.typeCode]:[]),
+			...new Short(this.size()).result(),
+			...new Byte(this.TValue).result(),
+			...arr
+		]);
+	}
+	read(buf,full=0,size=-1){
+		size=size+1?size:new Short().read(buf);
+		let b=new Byte().read(buf);//type
+		let arr=new this.constructor([],b);
+		if(b==121){//TArray
+			arr.value=[new TArray().read(buf,full)];
+			for(let i=1;i<size;i++)
+				arr.value[i]=new TArray().read(buf,full);
+		}else{
+			if(b==120){//Array<ByteArray>
+				for(let i=0;i<size;i++)
+					arr.value[i]=new ByteArray().read(buf,full);
+			}else{
+				if(b==98){//ByteArray
+					arr.value=new ByteArray().read(buf,full,size);
+				}else{
+					if(b==105){//IntArray
+						for(let i=0;i<size;i++)
+							arr.value[i]=new Int().read(buf,full);
+					}else{
+						if(b==68){//Dictionary
+							for(let i=0;i<size;i++)
+								arr.value[i]=new Dictionary().read(buf,full);
+							return full?arr:arr.value;
+						}
+						for(let i=0;i<size;i++)
+							arr.value[i]=new Call().read(buf,full,b);//other types
+					}
+				}
+			}
+		}
+		return full?arr:arr.value;
+	}
+}
+class Hashtable extends TType{//{key:value,...}
+	constructor(value={}){super('Hashtable',104,value);}
+	size(){return Object.keys(this.value).length}
+	result(full=0){
+		let arr=[];
+		for(let k in this.value){
+			if(this.value[k].result){
+				arr=[
+					...arr,
+					...new Byte(Number(k)).result(1),
+					...this.value[k].result(1)
+				];
+			}
+		}
+		return new Uint8Array([
+			...(full?[this.typeCode]:[]),
+			...new Short(this.size()).result(),
+			...arr
+		]);
+	}
+	read(buf,full=0,size=-1){
+		size=size+1?size:new Short().read(buf);
+		arr={};
+		for(let i=0;i<size;i++){
+			let key=new Call().read(buf);
+			let value=new Call().read(buf,full);
+			if(!(key===null)){
+				arr[key]=value;
+			}
+		}
+		let res=new this.constructor(arr);
+		return full?res:res.value;
+	}
+}
+class Dictionary extends TType{//[ {key:"",value:{}},... ]
+	constructor(value=[],TKey,TValue){super('Dictionary',68,value);this.TKey=TKey;this.TValue=TValue;}
+	size(){return this.value.length}
+
+	result(full=0){
+		let arr=[];
+		for(let i in this.value){
+			arr=[
+				...arr,
+				...this.value[i].key.result(this.TKey==0),
+				...this.value[i].value.result(this.TValue==0)
+			];
+		}
+		return new Uint8Array([
+			...(full?[this.typeCode]:[]),
+			...new Byte(this.TKey).result(),
+			...new Byte(this.TValue).result(),
+			...new Short(this.size()).result(),
+			...arr
+		]);
+	}
+	read(buf,full=0,size=-1){
+		let TKey=new Byte().read(buf);
+		let TValue=new Byte().read(buf);
+		size=new Short().read(buf);
+		let arr=[];
+		for(let i=0;i<size;i++){
+			let key=new Call().read(buf,full,TKey||-1);
+			let value=new Call().read(buf,full,TValue||-1);
+			if(!(key===null)){
+				arr.push({key,value});
+			}
+		}
+		let res=new this.constructor(arr,TKey,TValue);
+		return full?res:res.value;
+	}
+}
+class Call{
+	constructor(){}
+	read(buf,full=0,type=-1){
+		type=type+1?type:new Byte().read(buf);
+		if(!type)throw "No type: "+type;
+		if(!GpType[type])throw "Unknown typeCode: "+type;
+		return new GpType[type]().read(buf,full)
+	}
+}
+const GpType={
+	0:0&&Unknown,
+	42:Null,
+
+	111:Bool,
+	98:Byte,
+	107:Short,
+	105:Int,
+	108:Long,
+	102:Float,
+	100:Double,
+	115:String,
+
+	121:TArray,
+	120:ByteArray,
+	119:0&&IntArray,
+	97:0&&StringArray,
+	122:0&&ObjectArray,
+
+	104:Hashtable,
+	68:Dictionary,
+
+	99:0&&Custom,
+	101:0&&EventData,
+	113:0&&OperationRequest,
+	112:0&&OperationResponse
+};
+
+function parseSocket(arr0,full=1){
+	if(arr0.length==3)return {header:[...arr0.slice(0,2)],opCode:arr0[2],result:function(){return toSocket(this)}};
+	//243,2,opCode,length,length
+	let buf=new StreamBuffer(arr0);buf.index=3;
+	let arr={header:[...arr0.slice(0,2)],opCode:arr0[2],size:new Short().read(buf)};
+	for(let i=0;i<arr.size;i++){
+		let slot=new Byte().read(buf);
+		arr[slot]=new Call().read(buf,full);
+	}
+	arr.result=function(){return toSocket(this)};
+	return arr;
+}
+
+function toSocket(arr){
+	let buf=new StreamBuffer();
+	buf.write(arr.header);
+	buf.writeByte(arr.opCode);
+	if(arr.size>-1){
+		new Short(arr.size).write(buf);
+		if(arr.size>0){
+			for(let k in arr){
+				if(Number(k)>0){
+					buf.writeByte(Number(k));
+					arr[k].write(buf,1);
+				}
+			}
+		}
+	}
+	return buf.array;
+}
+
+function w7bit(buf,n){
+	for(;n>=128;n>>=7)buf.writeByte((n|128)%256);
+	buf.writeByte(n%256);
+};
+function r7bit(buf){
+	let num=0;
+	let num2=0;
+	while(num2!=35){
+		let b=buf.readByte();
+		num|=(b&127)<<num2;
+		if((b&128)==0){return num;}
+		num2+=7;
+	}
+};
+function getDictPacker(buf){
+	let data={};
+	let num=new Int().read(buf);
+	if(num>1e3)throw "wat is it?";
+	for(let i2=0;i2<num;i2++){
+		let key=new String().read(buf,0,r7bit(buf));
+		let type=new Byte().read(buf);
+		let value=0;
+		let len2=0;
+		switch(type){
+			case 0:
+				value=new Int().read(buf);
+			break;
+			case 1://int array
+				value=[];
+				len2=new Int().read(buf);
+				for(let i=0;i<len2;i++){
+					value.push(new Int().read(buf));
+				}
+			break;
+			case 2:
+				value=new Float().read(buf);
+			break;
+			case 3:
+				value=[];
+				len2=new Int().read(buf);
+				for(let i=0;i<len2;i++){
+					value.push(new Float().read(buf));
+				}
+			break;
+			case 5:
+				value=new Bool().read(buf);
+			break;
+			case 6:
+				value=[];
+				len2=new Int().read(buf);
+				for(let i=0;i<len2;i++){
+					value.push(new Bool().read(buf));
+				}
+			break;
+			case 7:
+				value=new String().read(buf,0,r7bit(buf));
+			break;
+			case 8:
+				value=getDictPacker(buf);
+			break;
+			case 9:
+				value=new Byte().read(buf);
+			break;
+			case 10:
+				value=new Long().read(buf);
+			break;
+			case 11:
+				value=[];
+				len2=new Int().read(buf);
+				for(let i=0;i<len2;i++){
+					value.push(new Long().read(buf));
+				}
+			break;
+		}
+		data[key]=value;
+	}
+	return data;
+}
+function getPackerInfo(BytePacker){
+	let result={proto:[],woList:[],links:[],objectLinks:[]};
+	let buf=new StreamBuffer(BytePacker)
+
+	/*prototypes*/
+	count=new Int().read(buf);
+	for(let i=0;i<count;i++){
+		let id=new Int().read(buf);
+		let scale=new Float().read(buf);
+		let authorId=new Int().read(buf);
+		let data=new ByteArray().read(buf);
+		result.proto.push({id,scale,authorId,data});
+	}
+	/*worldObjects*/
+	count=new Int().read(buf);//11812
+	for(let i=0;i<count;i++){
+		let id=new Int().read(buf);
+		let groupId=new Int().read(buf);
+		let itemId=new Int().read(buf);
+		let woType=new Int().read(buf);
+		let posX=new Float().read(buf);
+		let posY=new Float().read(buf);
+		let posZ=new Float().read(buf);
+		let rotationX=new Float().read(buf);
+		let rotationY=new Float().read(buf);
+		let rotationZ=new Float().read(buf);
+		let rotationW=new Float().read(buf);
+		let scaleX=new Float().read(buf);
+		let scaleY=new Float().read(buf);
+		let scaleZ=new Float().read(buf);
+		let data=getDictPacker(buf);
+		let owner=new Byte().read(buf);
+		let ownerID=null;
+		if((owner&1)!=0){
+			ownerID=new Int().read(buf);
+		}
+		if((owner&2)!=0){
+			ownerID=new Int().read(buf);
+		}
+		let data2=getDictPacker(buf);
+		result.woList.push({
+			id,groupId,itemId,woType,
+			pos:{x:posX,y:posY,z:posZ},
+			rotation:{x:rotationX,y:rotationY,z:rotationZ,w:rotationW},
+			scale:{x:scaleX,y:scaleY,z:scaleZ},
+			data,
+			owner,
+			ownerID,
+			data2
+		});
+	}
+	/*links*/
+	count=new Int().read(buf);
+	for(let i=0;i<count;i++){
+		let id=new Int().read(buf);
+		let input=new Int().read(buf);
+		let output=new Int().read(buf);
+		result.links.push({id,input,output});
+	}
+	/*objectLinks*/
+	count=new Int().read(buf);
+	for(let i=0;i<count;i++){
+		let id=new Int().read(buf);
+		let connectorWOID=new Int().read(buf);
+		let WOID=new Int().read(buf);
+		result.objectLinks.push({id,WOID,connectorWOID});
+	}
+	return result;
+}
+
+/*Kogama Cheat Functions*/
+window.kcc=top.kcc={
+	toSocket,
+	parseSocket,
+	ws:{},
+	easy:(socket)=>parseSocket(socket.result(),0),
+	memory:{
+		clear:()=>{kcc.memory.client={};kcc.memory.server={};},
+		client:{},
+		server:{}
+	},
+
+	cheat:{},
+
+	info:{
+		PID:0,
+		players:[],//{AID:208,PID:0,name:""}
+		inv:{
+			world:238,
+			cube:0
+		}
+	},
+	serverTime:()=>+new Date(),
+	request:{
+		build:{},//default requests
+		client:{//custom requests
+			build:{},
+			play:{},
+			character:{}
+		},
+		server:{//custom requests
+			build:{},
+			play:{},
+			character:{}
+		},
+		understand:{}
+	},
+
+	log:{
+		client:(msg,...items)=>console.log.apply(console,['%c'+msg,"background-color:#0808;",...items]),
+		server:(msg,...items)=>console.log.apply(console,['%c'+msg,"background-color:#F808;",...items])
+	},
+	inject:{
+		client:function(data){
+			data=new Uint8Array(data);
+			data=kcc.request.understand.client(data);
+			if(data)this._send(data);
+		},
+		server:function(e){
+			let data=new Uint8Array(e.data);
+			if(this  !=	kcc.ws){
+				kcc.log.server(`wait injection: [${data.toString()}]`);
+				return;
+			}
+			data=kcc.request.understand.server(data);
+			if(data)this._msg({data:data.buffer});
+		}
+	}
+};
+
+/*cheats*/
+//[243, 2, 109, 0, 0] for claim reward
+kcc.cheat.activateAllButtons=()=>{
+	kcc.worldObjectInfo.woList.filter(w=>w.itemId==10370).forEach(button=>{
+		kcc.ws.send(kcc.request.server.build.TriggerBoxEnter(button.id))
+	});
+};
+kcc.cheat.pickupStarts=(PID=kcc.info.PID)=>{
+	kcc.worldObjectInfo.woList.filter(w=>w.itemId==91197).forEach(crystal=>{
+		kcc.ws.send(kcc.request.server.build.TriggerBoxEnter(crystal.id,PID))
+	});
+}
+kcc.cheat.pickupCrystalls=(PID=kcc.info.PID)=>{
+	kcc.worldObjectInfo.woList.filter(w=>w.itemId==8880186).forEach(crystal=>{
+		kcc.ws.send(kcc.request.server.build.TriggerBoxEnter(crystal.id,PID))
+	});
+	kcc.worldObjectInfo.woList.filter(w=>w.itemId==8880187).forEach(crystal=>{
+		kcc.ws.send(kcc.request.server.build.TriggerBoxEnter(crystal.id,PID))
+	});
+}
+kcc.request.server.build.TriggerBoxEnter=function(WOID,PID=kcc.info.PID){
+	let data={
+		header:[243,2],
+		opCode:18,
+		size:1,
+		22:new TArray([new Int(WOID),new Int(PID)],105)
+	};
+	return toSocket(data);
+};
+kcc.request.server.build.TriggerBoxExit=function(WOID,PID=kcc.info.PID){
+	let data={
+		header:[243,2],
+		opCode:19,
+		size:1,
+		22:new TArray([new Int(WOID),new Int(PID)],105)
+	};
+	return toSocket(data);
+};
+
+/*requests separating*/
+kcc.request.understand.client=data=>{
+	/*translator*/
+	let socket={};
+	const socketName=MVOperationCodes.find(val=>val==data[2])[0];
+
+	try{
+		socket=parseSocket(data);
+	}catch(e){
+		console.log('client:'+socketName);
+		console.log('%c'+e,'background-color:#0F08;',data.toString());
+		socket.opCode=data[2];
+	}
+
+	/*memory*/
+	if(!(
+	socket.opCode==MVOperationCodes.UnregisterWorldObject||//not ping
+	socket.opCode==MVOperationCodes.UpdateWorldObject||//not moving
+	socket.opCode==MVOperationCodes.UpdateWorldObjectRunTimeData//not moving
+	)){
+		if(kcc.memory.client[socketName]){
+			kcc.memory.client[socketName].push(socket);
+		}else{
+			kcc.memory.client[socketName]=[socket];
+		}
+	}
+	return data;
+}
+
+kcc.request.understand.server=data=>{
+	/*translator*/
+	let socket={};
+	const socketName=MVEventCodes.find(val=>val==data[2])[0];
+
+	try{
+		socket=parseSocket(data);
+	}catch(e){
+		console.log('server:'+socketName);
+		console.log('%c'+e,'background-color:#F808;',data.toString());
+		socket.opCode=data[2];
+	}
+
+	/*memory*/
+	if(!(
+	socket.opCode==MVEventCodes.UnregisterWorldObject||//not ping
+	socket.opCode==MVEventCodes.LogicFrame||//not ping
+	socket.opCode==MVEventCodes.UpdateWorldObject||//not moving
+	socket.opCode==MVEventCodes.UpdateWorldObjectRunTimeData//not moving
+	)){
+		if(kcc.memory.server[socketName]){
+			kcc.memory.server[socketName].push(socket);
+		}else{
+			kcc.memory.server[socketName]=[socket];
+		}
+	}
+
+	/*success*/
+	if(socket.size){
+		switch(socket.opCode){
+			case MVEventCodes.RequestMaterials: //unlock all materials
+				socket[93].value.forEach(block=>block.value.value[9].value.value=1);
+				data=socket.result();
+			break;
+			case MVEventCodes.GameSnapshotData: //get all object info
+				if(!socket[100].value){
+					let buf=[];
+					kcc.memory.server.GameSnapshotData.forEach(socket=>buf=[...buf,...socket[245].value]);
+					kcc.worldObjectInfo=getPackerInfo(buf);
+				}
+			break;
+			case MVEventCodes.SetupUserPlayMode: //get current players
+				kcc.info.PID=JSON.parse(socket[245].value).activeSpawnRole;
+				socket[13].value.forEach(p=>{
+					kcc.info.players.push(Object.assign({},
+						JSON.parse(p.value.value[0].value.value),
+						JSON.parse(p.value.value[7].value.value),
+						JSON.parse(p.value.value[8].value.value),
+						{lang:p.value.value[4].value.value,profile:p.value.value[1].value.value}
+					));
+				});
+			break;
+			case MVEventCodes.Join: //create actor id (AID) runtime
+			{
+				let player=kcc.info.players.find(p=>p.AID==socket[254].value);
+				let info=JSON.parse(socket[224].value);
+				if(!player){
+					kcc.info.players.push({AID:socket[254].value});
+					player=kcc.info.players.find(p=>p.AID==socket[254].value);
+				}
+				Object.assign(player,info,{lang:socket[154].value,profile:socket[11].value});
+			}
+			break;
+			case MVEventCodes.ReplicateSpawnRoleData: //set player id (PID) runtime
+			{
+				let player=kcc.info.players.find(p=>p.AID==socket[254].value);
+				let info=JSON.parse(socket[245].value);
+				if(!player){
+					kcc.info.players.push({AID:socket[254].value});
+					player=kcc.info.players.find(p=>p.AID==socket[254].value);
+				}
+				Object.assign(player,info);
+				player.PID=player.ActiveSpawnRole;
+			}
+			break;
+			case MVEventCodes.Leave:
+				kcc.info.players.splice(kcc.info.players.indexOf(kcc.info.players.find(p=>p.AID==socket[254].value)),1);
+			break;
+		}
+	}
+	return data;
+}
+
+/*requests generator*/
+kcc.request.build.client=data=>new Uint8Array(data);
+kcc.request.build.server=data=>({data:new Uint8Array(data).buffer});
